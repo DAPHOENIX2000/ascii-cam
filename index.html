@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASCII Cam</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--green:#00ff41;--dim:#003b0f;--bg:#000300;--panel:#050f05}
+body{background:var(--bg);color:var(--green);font-family:'Share Tech Mono',monospace;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+
+/* SCANLINE EFFECT */
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.08) 2px,rgba(0,0,0,.08) 4px);pointer-events:none;z-index:1000;animation:flicker 8s infinite}
+@keyframes flicker{0%,100%{opacity:1}92%{opacity:1}93%{opacity:.8}94%{opacity:1}97%{opacity:.9}98%{opacity:1}}
+
+/* CRT BORDER GLOW */
+body::before{content:'';position:fixed;inset:0;box-shadow:inset 0 0 80px rgba(0,255,65,.05),inset 0 0 200px rgba(0,0,0,.5);pointer-events:none;z-index:999}
+
+/* HEADER TERMINAL BAR */
+header{border-bottom:1px solid var(--dim);padding:.8rem 1.5rem;display:flex;align-items:center;gap:1.5rem;background:var(--panel);position:sticky;top:0;z-index:10;flex-wrap:wrap}
+.hlogo{font-size:1.1rem;letter-spacing:.1em;color:var(--green);text-shadow:0 0 10px var(--green)}
+.hlogo::before{content:'> ';color:rgba(0,255,65,.4)}
+.status-row{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#ff4444;box-shadow:0 0 6px #ff4444;flex-shrink:0;transition:all .3s}
+.status-dot.live{background:var(--green);box-shadow:0 0 10px var(--green);animation:dotpulse 1.5s infinite}
+@keyframes dotpulse{0%,100%{opacity:1}50%{opacity:.4}}
+.status-txt{font-size:.72rem;color:rgba(0,255,65,.6);letter-spacing:.08em}
+.hright{margin-left:auto;display:flex;gap:.6rem;flex-wrap:wrap}
+
+/* TERMINAL BUTTONS */
+.tbtn{background:transparent;border:1px solid var(--dim);color:rgba(0,255,65,.7);font-family:'Share Tech Mono',monospace;font-size:.72rem;padding:.4rem .9rem;cursor:pointer;letter-spacing:.08em;transition:all .15s;position:relative;overflow:hidden}
+.tbtn::before{content:'';position:absolute;inset:0;background:var(--green);opacity:0;transition:opacity .15s}
+.tbtn:hover{border-color:var(--green);color:var(--green);box-shadow:0 0 10px rgba(0,255,65,.2)}
+.tbtn:hover::before{opacity:.05}
+.tbtn.active{border-color:var(--green);color:var(--bg);background:var(--green);box-shadow:0 0 15px rgba(0,255,65,.4)}
+.tbtn.active::before{opacity:0}
+select.tbtn{cursor:pointer;appearance:none;padding-right:1.5rem}
+
+/* MAIN LAYOUT */
+.main{display:grid;grid-template-columns:1fr 260px;flex:1;min-height:0}
+
+/* ASCII OUTPUT */
+.ascii-area{padding:1rem;overflow:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+.terminal-prompt{font-size:.7rem;color:rgba(0,255,65,.3);margin-bottom:.5rem;align-self:flex-start;width:100%}
+.terminal-prompt span{color:rgba(0,255,65,.6)}
+#ascii-out{font-size:5.5px;line-height:1.05;letter-spacing:.8px;white-space:pre;display:block;text-shadow:0 0 3px currentColor;transition:color .3s}
+.cam-off{text-align:center;padding:4rem 2rem;color:rgba(0,255,65,.3);line-height:1.8}
+.cam-off .big-ascii{font-size:.72rem;line-height:1.2;margin-bottom:1.5rem;opacity:.4;white-space:pre}
+.start-cta{border:1px solid var(--green);color:var(--green);background:transparent;font-family:'Share Tech Mono',monospace;font-size:.8rem;padding:.8rem 2rem;cursor:pointer;letter-spacing:.1em;box-shadow:0 0 20px rgba(0,255,65,.15);transition:all .2s;display:block;margin:0 auto}
+.start-cta:hover{background:rgba(0,255,65,.08);box-shadow:0 0 30px rgba(0,255,65,.25)}
+
+/* SIDE PANEL */
+.side{background:var(--panel);border-left:1px solid var(--dim);display:flex;flex-direction:column;overflow:hidden}
+.side-section{border-bottom:1px solid var(--dim);padding:1rem}
+.side-label{font-size:.58rem;letter-spacing:.18em;color:rgba(0,255,65,.35);text-transform:uppercase;margin-bottom:.8rem}
+/* Color modes */
+.color-grid{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+.cm-btn{border:1px solid var(--dim);background:transparent;font-family:'Share Tech Mono',monospace;font-size:.62rem;padding:.45rem;cursor:pointer;letter-spacing:.06em;transition:all .15s;text-align:center}
+.cm-btn:hover{border-color:rgba(255,255,255,.3)}
+.cm-btn.active{border-color:currentColor;box-shadow:0 0 8px currentColor;background:rgba(0,0,0,.5)}
+/* Density */
+.density-row{display:flex;flex-direction:column;gap:.4rem}
+.dens-btn{border:1px solid var(--dim);background:transparent;color:rgba(0,255,65,.6);font-family:'Share Tech Mono',monospace;font-size:.62rem;padding:.4rem .6rem;cursor:pointer;text-align:left;transition:all .15s;letter-spacing:.04em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dens-btn:hover{border-color:rgba(0,255,65,.4)}
+.dens-btn.active{border-color:var(--green);color:var(--green);background:rgba(0,255,65,.05)}
+/* Stats */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.stat-item{border:1px solid var(--dim);padding:.5rem;text-align:center}
+.stat-n{font-size:1rem;color:var(--green);line-height:1}
+.stat-l{font-size:.55rem;color:rgba(0,255,65,.3);margin-top:.2rem}
+/* Gallery */
+.gallery{flex:1;overflow-y:auto;padding:.8rem}
+.gallery-title{font-size:.58rem;letter-spacing:.18em;color:rgba(0,255,65,.35);text-transform:uppercase;margin-bottom:.6rem}
+.snap-item{border:1px solid var(--dim);margin-bottom:.5rem;padding:.5rem;cursor:pointer;transition:border-color .15s}
+.snap-item:hover{border-color:rgba(0,255,65,.4)}
+.snap-preview{font-size:2.5px;line-height:1.05;letter-spacing:.5px;white-space:pre;overflow:hidden;max-height:40px;color:var(--green);text-shadow:none;margin-bottom:.3rem}
+.snap-meta{font-size:.55rem;color:rgba(0,255,65,.3)}
+/* Size slider */
+.slider-wrap{display:flex;align-items:center;gap:.6rem}
+input[type=range]{flex:1;accent-color:var(--green);background:var(--dim);height:4px;border-radius:0}
+.slider-val{font-size:.65rem;color:rgba(0,255,65,.6);min-width:20px}
+
+video,canvas{display:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="hlogo">ASCII_CAM</div>
+  <div class="status-row">
+    <div class="status-dot" id="status-dot"></div>
+    <div class="status-txt" id="status-txt">OFFLINE — NO SIGNAL</div>
+  </div>
+  <div class="hright">
+    <button class="tbtn" id="cam-btn" onclick="toggleCam()">[ INIT CAM ]</button>
+    <button class="tbtn" onclick="snapshot()">[ SNAP ]</button>
+    <button class="tbtn" onclick="downloadSnap()">[ SAVE ]</button>
+  </div>
+</header>
+
+<div class="main">
+  <div class="ascii-area">
+    <div class="terminal-prompt">> <span id="prompt-txt">awaiting input...</span></div>
+    <div id="ascii-out">
+      <div class="cam-off">
+        <div class="big-ascii">  ____  ____  ___  _  _
+ (_  _)( ___)(  _)( \( )
+   )(   )__)  ) _)  )  (
+  (__) (____)(___)(____)</div>
+        <div style="margin-bottom:1.5rem;font-size:.75rem;opacity:.5;line-height:1.8">
+          SYSTEM READY<br>
+          AWAITING CAMERA FEED<br>
+          ────────────────────<br>
+          REAL-TIME ASCII RENDERING<br>
+          100% LOCAL — NO DATA SENT
+        </div>
+        <button class="start-cta" onclick="toggleCam()">[ INITIALIZE CAMERA ]</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="side-section">
+      <div class="side-label">Color Mode</div>
+      <div class="color-grid">
+        <button class="cm-btn active" style="color:#00ff41" onclick="setColor('green',this)">GREEN</button>
+        <button class="cm-btn" style="color:#ffb000" onclick="setColor('amber',this)">AMBER</button>
+        <button class="cm-btn" style="color:#fff" onclick="setColor('white',this)">WHITE</button>
+        <button class="cm-btn" style="color:#00ffff" onclick="setColor('cyan',this)">CYAN</button>
+        <button class="cm-btn" style="color:#ff44aa" onclick="setColor('pink',this)">PINK</button>
+        <button class="cm-btn" style="color:#ff6600" onclick="setColor('orange',this)">ORANGE</button>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-label">Character Density</div>
+      <div class="density-row">
+        <button class="dens-btn active" onclick="setDens('full',this)">FULL: @#S%?*+;:,. </button>
+        <button class="dens-btn" onclick="setDens('medium',this)">MED:  @8#oO*;:,. </button>
+        <button class="dens-btn" onclick="setDens('light',this)">LIGHT: @+;:. </button>
+        <button class="dens-btn" onclick="setDens('blocks',this)">BLOCK: █▓▒░ </button>
+        <button class="dens-btn" onclick="setDens('binary',this)">BINARY: 10</button>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-label">Resolution</div>
+      <div class="slider-wrap">
+        <span style="font-size:.6rem;color:rgba(0,255,65,.4)">LOW</span>
+        <input type="range" id="res-slider" min="60" max="160" value="110" oninput="setRes()">
+        <span style="font-size:.6rem;color:rgba(0,255,65,.4)">HIGH</span>
+      </div>
+      <div style="font-size:.58rem;color:rgba(0,255,65,.3);margin-top:.3rem">Font size: <span id="font-size-lbl">5.5px</span></div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-label">Stats</div>
+      <div class="stat-grid">
+        <div class="stat-item"><div class="stat-n" id="st-fps">0</div><div class="stat-l">FPS</div></div>
+        <div class="stat-item"><div class="stat-n" id="st-snaps">0</div><div class="stat-l">SNAPS</div></div>
+        <div class="stat-item"><div class="stat-n" id="st-cols">0</div><div class="stat-l">COLS</div></div>
+        <div class="stat-item"><div class="stat-n" id="st-rows">0</div><div class="stat-l">ROWS</div></div>
+      </div>
+    </div>
+
+    <div class="gallery">
+      <div class="gallery-title">Snapshot Gallery (<span id="gal-count">0</span>)</div>
+      <div id="gallery"></div>
+    </div>
+  </div>
+</div>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
+
+<script>
+const CHARS={full:'@#S%?*+;:,. ',medium:'@8#oO*;:,. ',light:'@+;:. ',blocks:'█▓▒░ ',binary:'10 '};
+const COLORS={green:'#00ff41',amber:'#ffb000',white:'#ffffff',cyan:'#00ffff',pink:'#ff44aa',orange:'#ff6600'};
+let running=false,stream=null,raf=null;
+let charSet=CHARS.full,colorMode='green',W=110,H=55,fontSize=5.5;
+let snapshots=[],fpsCounter=0,fpsTime=Date.now(),fpsVal=0;
+const video=document.getElementById('video');
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d',{willReadFrequently:true});
+const out=document.getElementById('ascii-out');
+
+function setColor(m,btn){
+  colorMode=m;
+  document.querySelectorAll('.cm-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  out.style.color=COLORS[m];
+  out.style.textShadow=`0 0 4px ${COLORS[m]}`;
+}
+function setDens(d,btn){
+  charSet=CHARS[d];
+  document.querySelectorAll('.dens-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function setRes(){
+  W=+document.getElementById('res-slider').value;
+  H=Math.round(W*.45);
+  fontSize=Math.max(3,Math.round(1100/W)/10);
+  out.style.fontSize=fontSize+'px';
+  document.getElementById('font-size-lbl').textContent=fontSize+'px';
+}
+
+async function toggleCam(){
+  if(running){stopCam();return}
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240},audio:false});
+    video.srcObject=stream;await video.play();
+    running=true;
+    document.getElementById('cam-btn').textContent='[ KILL CAM ]';
+    document.getElementById('cam-btn').classList.add('active');
+    document.getElementById('status-dot').classList.add('live');
+    document.getElementById('status-txt').textContent='LIVE — CAMERA FEED ACTIVE';
+    document.getElementById('prompt-txt').textContent='rendering ascii...';
+    out.style.color=COLORS[colorMode];
+    out.style.textShadow=`0 0 4px ${COLORS[colorMode]}`;
+    loop();
+  }catch(e){
+    document.getElementById('status-txt').textContent='ERROR: '+e.message;
+    out.innerHTML=`<div class="cam-off"><div style="color:#ff4444;font-size:.8rem;line-height:2">CAMERA ACCESS DENIED<br>${e.message}<br><br>Please allow camera access<br>and try again.</div></div>`;
+  }
+}
+function stopCam(){
+  running=false;cancelAnimationFrame(raf);
+  if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;
+  document.getElementById('cam-btn').textContent='[ INIT CAM ]';
+  document.getElementById('cam-btn').classList.remove('active');
+  document.getElementById('status-dot').classList.remove('live');
+  document.getElementById('status-txt').textContent='OFFLINE — FEED TERMINATED';
+  document.getElementById('prompt-txt').textContent='awaiting input...';
+  out.innerHTML=`<div class="cam-off" style="padding:2rem"><div style="font-size:.8rem;opacity:.4;line-height:1.8">FEED TERMINATED<br>[ INITIALIZE CAMERA ] to restart</div></div>`;
+}
+
+function loop(){if(!running)return;render();fpsCounter++;const now=Date.now();if(now-fpsTime>1000){fpsVal=fpsCounter;fpsCounter=0;fpsTime=now;document.getElementById('st-fps').textContent=fpsVal}raf=requestAnimationFrame(loop)}
+
+function render(){
+  canvas.width=W;canvas.height=H;
+  ctx.drawImage(video,0,0,W,H);
+  const data=ctx.getImageData(0,0,W,H).data;
+  let rows='';
+  for(let y=0;y<H;y++){let row='';for(let x=0;x<W;x++){const i=(y*W+x)*4;const b=(data[i]*.299+data[i+1]*.587+data[i+2]*.114)/255;const ci=Math.floor((1-b)*(charSet.length-1));row+=charSet[ci]}rows+=row+'\n'}
+  out.textContent=rows;
+  document.getElementById('st-cols').textContent=W;
+  document.getElementById('st-rows').textContent=H;
+}
+
+function snapshot(){
+  if(!running){alert('Start the camera first!');return}
+  const text=out.textContent;
+  const preview=text.split('\n').slice(0,8).join('\n');
+  snapshots.unshift({text,preview,time:new Date().toLocaleTimeString(),color:colorMode});
+  if(snapshots.length>6)snapshots.pop();
+  document.getElementById('st-snaps').textContent=snapshots.length;
+  renderGallery();
+}
+function downloadSnap(){
+  if(!out.textContent.trim()||out.querySelector('.cam-off')){alert('No ASCII to save!');return}
+  const b=new Blob([out.textContent],{type:'text/plain'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`ascii-${Date.now()}.txt`;a.click();
+}
+function renderGallery(){
+  document.getElementById('gal-count').textContent=snapshots.length;
+  document.getElementById('gallery').innerHTML=snapshots.map((s,i)=>`
+    <div class="snap-item" onclick="loadSnap(${i})">
+      <div class="snap-preview" style="color:${COLORS[s.color]}">${s.preview}</div>
+      <div class="snap-meta">${s.time} · ${s.color.toUpperCase()}</div>
+    </div>`).join('');
+}
+function loadSnap(i){if(!running)out.textContent=snapshots[i].text}
+
+out.style.color=COLORS.green;
+</script>
+</body>
+</html>
